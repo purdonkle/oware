@@ -7,23 +7,19 @@ type StartingPosition =
 type Board = 
     { House : int*int*int*int*int*int*int*int*int*int*int*int
       Turn : StartingPosition
-      Score : int*int} // 0 - South && 1 - North
+      Score : int*int} // (south, north)
 
-
+// return number of tokens at house n on board
+// input : n - int, board - Board
+// return : int
 let getSeeds n board = 
     let {House = (h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = board
     match n with
     | 1 -> h1 | 2 -> h2 | 3 -> h3 | 4 -> h4 | 5 -> h5 | 6 -> h6 | 7 -> h7 | 8 -> h8 | 9 -> h9 | 10 -> h10 | 11 -> h11 | 12 -> h12 | _ -> failwith "Incorrect n house" 
 
-let printBoard board =
-    let rec printer i board=
-        match (i < 13) with
-        | true -> 
-            printer (i+1) board
-            printfn "House %d: %d" i (getSeeds i board)
-        | false -> ()
-    printer 1 board
-
+// set number of tokens at house n to zero
+// input : board - Board, n - int
+// return : int*int*int*int*int*int*int*int*int*int*int*int
 let setHouseToZero board n =
     let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = board
     match n with
@@ -41,6 +37,9 @@ let setHouseToZero board n =
     | 12 -> (h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,0)
     | _ -> failwith "error n out of bounds"
 
+// add a single token at house n
+// input : board - Board, n - int
+// return : int*int*int*int*int*int*int*int*int*int*int*int
 let addTokenToHouse board n = 
     let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = board
     match n with
@@ -58,99 +57,141 @@ let addTokenToHouse board n =
     | 12 -> (h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12+1)
     | _ -> failwith "error n out of bounds"
 
+// invert the current player of board
+// input : board - Board
+// return : Board
 let changePlayers board =
     let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12); Turn=t; Score=(sScore,nScore)} = board
     match (t = South) with
     | true -> {board with Turn=North}
     | false -> {board with Turn=South}
 
+// collect tokens for scoring where tokens are 2 or 3 and according to rules
+// input : board - Board, n - int
+// return Board
 let rec collectTokens board n =
     let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12); Turn=t; Score=(sScore,nScore)} = board
-    match ((getSeeds n board) = 2) || ((getSeeds n board) = 3) with
+    match ((getSeeds n board) = 2) || ((getSeeds n board) = 3) with // tokens at house are 2 or 3 
     | true -> 
-        match (t = South) with
+        match (t = South) with // South is the player
         | true -> 
-            match ((n >= 7) && (n <= 12)) with
+            match ((n >= 7) && (n <= 12)) with // collecting from north opponents houses only
             | true ->
-                match (n = 7) with
-                | true -> collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} n
-                | false -> collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} (n-1)
-            | false -> board
-        | false ->
-            match ((n >= 1) && (n <= 6)) with
+                match (n = 7) with // is the house contiguous?
+                | true -> // yes house is contiguous
+                    let futureBoard = collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} (n) // save the next recursion call to futureBoard
+                    let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = futureBoard
+                    match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (h1,h2,h3,h4,h5,h6,0,0,0,0,0,0)) with // will the following recursion call leave the opposite player with no tokens?
+                    | true -> 
+                        match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (0,0,0,0,0,0,0,0,0,0,0,0)) with // is this a case of a 24 - 24 draw?
+                        | true ->
+                            collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} n // yes case of 24 - 24 draw - draw last tokens
+                        | false -> board // no not a 24 - 24 draw invalid move
+                    | false -> collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} n // return the current board because futureBoard leaves the player with no tokens
+                | false -> collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} (n-1) // house is not contiguous 
+            | false -> board // cannot collect own house tokens
+        | false -> // north is the player
+            match ((n >= 1) && (n <= 6)) with // collecting from south opponents houses only
             | true -> 
-                match (n = 1) with
-                | true -> collectTokens {board with House=(setHouseToZero board n); Score=(sScore, (nScore + (getSeeds n board)))} n
-                | false -> collectTokens {board with House=(setHouseToZero board n); Score=(sScore, (nScore + (getSeeds n board)))} (n-1)
-            | false -> board
-    | false -> board
+                match (n = 1) with // is the house contiguous?
+                | true -> // yes house is contiguous
+                    let futureBoard = collectTokens {board with House=(setHouseToZero board n); Score=((sScore + (getSeeds n board)), nScore)} (n) // save the next recursion call to futureBoard
+                    let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = futureBoard
+                    match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (0,0,0,0,0,0,h7,h8,h9,h10,h11,h12)) with // will the following recursion call leave the opposite player with no tokens?
+                    | true -> 
+                        match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (0,0,0,0,0,0,0,0,0,0,0,0)) with // is this a case of a 24 - 24 draw?
+                        | true -> 
+                            collectTokens {board with House=(setHouseToZero board n); Score=(sScore, (nScore + (getSeeds n board)))} n // yes case of 24 - 24 draw - draw last tokens
+                        | false -> board // no not a 24 - 24 draw invalid move
+                    | false -> collectTokens {board with House=(setHouseToZero board n); Score=(sScore, (nScore + (getSeeds n board)))} n // return the current board because futureBoard leaves the player with no tokens
+                | false ->  collectTokens {board with House=(setHouseToZero board n); Score=(sScore, (nScore + (getSeeds n board)))} (n-1) // house is not contiguous 
+            | false -> board // cannot collect own house tokens
+    | false -> board // tokens at house does not equal 2 or 3
 
-let useHouse n board =
+// distribute the tokens clockwise across the board according to the rules
+// input : n - int, board - Board
+// return : Board
+let useHouse n board = 
+
+    // recursive loop distributing the tokens from the chosen house
+    // input : pos - int, houses - int*int*int*int*int*int*int*int*int*int*int*int, counter - int
+    // return : Board
+    let rec changeHouse pos houses counter =
+        match (counter = 0) with // decrement until counter = 0
+        | true -> // counter = 0
+            match ((getSeeds pos {board with House=houses}) = 2) || ((getSeeds pos {board with House=houses}) = 3) with // does the last distributed token make a house or 2 or 3?
+            | false -> changePlayers {board with House=houses} // no it is not a house of 2 or 3
+            | true -> changePlayers (collectTokens {board with House=houses} pos) // yes it is a house of 2 or 3 so we collect the tokens
+        | false -> // counter <> 0
+            match (n = pos) with // are we trying to distribute to the original house?
+            | true -> changeHouse ((pos%12)+1) houses counter // yes we are - skip this house
+            | false -> // no we are not 
+                match (counter = 1) with // is this the second last token we are placing down?
+                | true -> changeHouse pos (addTokenToHouse {board with House=houses} pos) (counter-1) // yes it is the last token so we dont increase pos 
+                | false -> changeHouse ((pos%12)+1) (addTokenToHouse {board with House=houses} pos) (counter-1) // no it is not so we increase pos to move to the next house
+
     let {Turn=t} = board
-    let originalHouse = n
-    let rec changeHouse n newBoard counter =
-        match (counter = 0) with
-        | true -> 
-            match ((getSeeds n {board with House=newBoard}) = 2) || ((getSeeds n {board with House=newBoard}) = 3) with
-            | false -> changePlayers {board with House=newBoard} 
-            | true -> changePlayers (collectTokens {board with House=newBoard} n)
-        | false ->
-            match (originalHouse = n) with
-            | true -> changeHouse ((n%12)+1) newBoard counter
-            | false ->
-                match (counter = 1) with
-                | true -> changeHouse n (addTokenToHouse {board with House=newBoard} n) (counter-1)
-                | false -> changeHouse ((n%12)+1) (addTokenToHouse {board with House=newBoard} n) (counter-1)
-
-    match (t = South) with
-    | true -> 
-        match (((n >= 1) && (n <= 6)) && (getSeeds n board) <> 0) with
-        | true -> changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board)
-        | false -> board
-    | false ->
-        match (((n >= 7) && (n <= 12)) && (getSeeds n board) <> 0) with
-        | true -> changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board)
-        | false -> board
+    match (t = South) with // is it south's turn?
+    | true -> // south's turn
+        match (((n >= 1) && (n <= 6)) && (getSeeds n board) <> 0) with // is south moving south's tokens and does south have tokens to place?
+        | true -> // yes and yes makes a yes
+            let futureBoard = changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board) // save south's next recursion call to futureBoard 
+            let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = futureBoard
+            match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (h1,h2,h3,h4,h5,h6,0,0,0,0,0,0)) with // is south's next move going to take all of oppnents tokens?
+            | true -> // yes south's next turn will take all the opponents pieces
+                match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (0,0,0,0,0,0,0,0,0,0,0,0)) with // is the futureBoard a 24 - 24 draw case?
+                | true -> changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board) // yes 24 - 24 draw case so we allow the distribution
+                | false -> board // not a 24 - 24 draw case invalid move
+            | false -> changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board) // no south's turn does not take all the opponents pieces valid move
+        | false -> board // no and yes or yes and no makes a no
+    | false -> // north's turn
+        match (((n >= 7) && (n <= 12)) && (getSeeds n board) <> 0) with // is north moving north's tokens and does north have tokens to place?
+        | true -> // yes and yes makes a yes
+            let futureBoard = changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board) // save north's next recursion call to futureBoard 
+            let {House=(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12)} = futureBoard
+            match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (0,0,0,0,0,0,h7,h8,h9,h10,h11,h12)) with // is north's next move going to take all of oppnents tokens?
+            | true -> // yes north's next turn will take all the opponents pieces
+                match ((h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12) = (0,0,0,0,0,0,0,0,0,0,0,0)) with // is the futureBoard a 24 - 24 draw case?
+                | true -> changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board) // yes 24 - 24 draw case so we allow the distribution
+                | false -> board // not a 24 - 24 draw case invalid move
+            | false -> changeHouse ((n%12)+1) (setHouseToZero board n) (getSeeds n board) // no north's turn does not take all the opponents pieces valid move
+        | false -> board // no and yes or yes and no makes a no
     
 
+// creates the starting board
+// input : position - StartingPosition
+// output : Board
 let start position = 
     match position with
-    | South -> {House=(4,4,4,4,4,4,4,4,4,4,4,4); Turn=South; Score=(0,0)}
-    | North -> {House=(4,4,4,4,4,4,4,4,4,4,4,4); Turn=North; Score=(0,0)}
+    | South -> {House=(4,4,4,4,4,4,4,4,4,4,4,4); Turn=South; Score=(0,0)} // south started
+    | North -> {House=(4,4,4,4,4,4,4,4,4,4,4,4); Turn=North; Score=(0,0)} // north started
 
+// returns the score from a board
+// input : board - Board
+// output : (int*int)
 let score board = 
     let {Score=(sScore,nScore)} = board
     (sScore,nScore)
 
+// decides who wins accoring to the scores
+// input : board - Board
+// output : String
 let gameState board = 
     let {Turn=t; Score=(sScore,nScore)} = board
-    match ((sScore = 24) || (nScore = 24)) with
-    | true -> "Game ended in a draw"
-    | false ->
-        match ((sScore >= 25) || (nScore >= 25)) with
+    match ((sScore = 24) || (nScore = 24)) with // draw?
+    | true -> "Game ended in a draw" // yes
+    | false -> // no
+        match ((sScore >= 25) || (nScore >= 25)) with // winner?
         | true -> 
             match (sScore >= 25) with
-            | true -> "South won"
-            | false -> "North won"
+            | true -> "South won" // south wins
+            | false -> "North won" // north wins
         | false ->
-            match (t=South) with
-            | true -> "South's turn"
-            | false -> "North's turn"
+            match (t=South) with // must still be continuing
+            | true -> "South's turn" // souths turn
+            | false -> "North's turn" // norths turn
 
 [<EntryPoint>]
 let main _ =
     printfn "Hello from F#!"
-    
-    let playGame numbers =
-        let rec play xs game =
-            match xs with
-            | [] -> game
-            | x::xs -> play xs (useHouse x game)
-        play numbers (start South)
-
-    playGame [6; 8; 5; 9; 4; 12; 3; 10; 1; 11; 2; 12; 5; 7; 5; 11; 6; 8; 1; 12; 4; 10; 5; 9;
-    2; 11; 3; 12; 6; 9; 5; 10; 2; 11; 1; 12; 4; 7; 6; 7; 3; 8; 5; 9; 6; 10; 1; 11;
-     2; 12; 3; 8; 4; 9; 1; 10; 2; 11; 3; 12; 1] |> printBoard
-
-    //board |> printBoard
     0 // return an integer exit code
